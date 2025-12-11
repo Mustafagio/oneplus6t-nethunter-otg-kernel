@@ -1,165 +1,173 @@
-# OnePlus 6T OTG Kernel Patch Project  
-**Experimental OTG Enabling for OnePlus 6T (sdm845) under Kali NetHunter Pro**
+# OnePlus 6T – NetHunter OTG Kernel Experiments  
+**Status:** Highly experimental | Boot image + DTB modification research  
+**Device:** OnePlus 6T (fajita)  
+**Goal:** Enable full USB Host (OTG) mode under Kali NetHunter Pro (sdm845)
 
 ---
 
-## ⚠️ Disclaimer
-This project is **experimental** and may cause **bootloops**, **soft-bricks**, or require manual fastboot recovery.  
-All work is performed on a test device by choice, and contributors should be aware of the risks.
+## 📌 Purpose
+
+This repository documents an ongoing technical experiment focused on:
+
+- Enabling **USB Host / OTG** mode on OnePlus 6T  
+- Modifying **DTB**, **kernel image**, and **NetHunter boot images**  
+- Testing custom patches and custom-compiled kernels  
+- Creating a clean, documented knowledge base for the community  
+- Allowing others with SDM845 or OnePlus expertise to contribute
+
+This is **not a stable kernel**, not intended for production use.  
+The purpose is **learning, sharing, experimenting**, and debugging OTG behavior on SDM845.
 
 ---
 
-## 🎯 Purpose
-The goal of this project is to understand and modify the **USB controller (DWC3)** and **Device Tree (DTB)** on the OnePlus 6T to enable **stable OTG Host Mode** under:
+## ⚠️ Current Status
 
-- Kali NetHunter Pro  
-- Custom kernels  
-- Modified boot images  
+- Many experimental builds lead to **bootloop**  
+- Some DTB edits cause **early crash during boot**  
+- AIK sometimes fails with **"ASCII compression"** errors  
+- netHunter boot images require **special repack steps**  
+- OTG mode is still **unstable / not fully functional**  
+- USB drivers (`snps,dwc3`, `qcom,dwc3`) show different behaviors depending on DTB patch
 
-We share progress here so the community can:
+Anyone with knowledge of:
 
-- Review experiments  
-- Suggest improvements  
-- Provide patches  
-- Help stabilize OTG on OP6T  
+- SDM845 USB PHY  
+- DWC3 USB host driver  
+- OnePlus device tree  
+- NetHunter boot structure  
 
----
-
-## 📌 Current Status
-
-- Many builds result in **bootloop**
-- Some DTB edits cause early crash or interrupt failure
-- AIK sometimes breaks due to `ASCII parsing` issues
-- OTG mode still **unstable / not fully functional**
-- Working hypothesis: OTG needs **multiple DTB nodes patched**, not only `dr_mode`
+…is welcome to help.
 
 ---
+
+
 
 ## 📁 Folder Structure
 
 op6t-otg-kernel/
 │
-├── dtb/ → DTB files used in experiments
-├── images/ → Kernel Image, stock boot, extracted boot
-├── scripts/ → Helper scripts for unpack/patch/repack
-├── configs/ → Kernel config files (defconfig, custom configs)
-└── build-logs/ → dmesg logs, bootloop logs, debug notes
+├── dtb/ # Decompiled & modified DTS/DTBs for experiment
+│
+├── images/ # Kernel Image, stock boot, extracted boot components
+│ ├── boot-stock.img
+│ ├── Image.gz
+│ └── dtb
+│
+├── scripts/ # Helper scripts (unpack / patch / repack)
+│ ├── unpack.sh
+│ ├── repack.sh
+│ └── dtb_patch.sh
+│
+├── build-logs/ # dmesg logs, bootloop notes, test results
+│
+└── configs/ # kernel configs (defconfig, .config backups)
 
 
 ---
 
-## 🔧 Tools Used
+## 🛠️ Tools Used
 
-- **AIK-Linux** (Android Image Kitchen) for unpacking and repacking boot images  
-- **dtc** (Device Tree Compiler)  
-- **magiskboot** for repacking alternative boot formats  
-- **fastboot** for flashing / testing  
-- **Kali NetHunter Pro kernel source (qcom-linux)**  
+- **AIK (Android Image Kitchen)**  
+  Used for unpacking stock boot images.
 
----
+- **magiskboot (source-built)**  
+  Used to repack modified boot images.
 
-## 🧪 Experiment Notes
+- **Device Tree Compiler (dtc)**  
+  For turning DTB → DTS → modified DTB.
 
-### ✔ What works
-- Extracting boot image  
-- Editing DTB files  
-- Repacking images  
-- Flashing or temporarily booting with `fastboot boot`  
-
-### ✖ What fails
-- Many edited DTBs cause **kernel panic before init**  
-- Changing the internal DWC3 controller node often causes **instant bootloop**  
-- Repack errors during ASCII → binary transformation in DTB  
-
-### 🧩 Hypothesis
-OTG mode likely requires changes in:
-
-- `/soc@0/.../usb@a600000` node  
-- `/soc@0/.../usb@a800000` node  
-- Power / PHY nodes  
-- QCOM-specific properties that override standard USB roles  
-
-Community expertise is needed to confirm this.
+- **Custom helper scripts**  
+  For automating kernel + ramdisk repack steps.
 
 ---
 
-## 🛠 Example: Current DTB Modification Approach
+## 🧪 Experiment Summary
 
-### 1. Extract DTB
-```bash
-dtc -I dtb -O dts -o a.dts sdm845-oneplus-fajita.dtb
+### 1. Extract boot image  
 
-2. Modify USB role
-
-Search for: dr_mode = "peripheral";
-
-Replace with: dr_mode = "host";
-
-3. Rebuild DTB
-
-dtc -I dts -O dtb -o host.dtb a.dts
-
-4. Inject into boot image
-
-(Custom script included in project /scripts)
-
-🚀 Flashing / Testing
-Temporary boot (recommended)
-fastboot boot boot-test.img
-
-If it bootloops, simply reboot to fastboot.
-
-Permanent flash (dangerous)
-fastboot flash boot boot-test.img
-
-📝 Logs & Debugging
-
-Place your logs in:
-
-build-logs/dmesg/
-build-logs/bootloop/
+./unpack.sh boot-stock.img
 
 
-Useful logs include:
+### 2. Modify DTB  
+Example goal: Force USB Host mode  
 
-dmesg from successful boots
 
-UART logs from early crashes
+dr_mode = "host";
 
-Kernel panic screenshots
+But experiments show SDM845 may require additional PHY & glue changes.
 
-Output from fastboot getvar all
+### 3. Repack  
 
-🤝 Contributions
+
+./repack.sh new_boot.img
+
+
+### 4. Test via fastboot  
+
+
+fastboot boot new_boot.img
+
+
+---
+
+## 🔍 Findings So Far
+
+- Some DWC3 nodes default to `"peripheral"`  
+- Changing **only dr_mode** often causes kernel panic  
+- Boot image repacking requires special alignment on OnePlus 6T  
+- Magiskboot source-compiled version avoids segmentation faults  
+- NetHunter boot images include additional ramdisk layers (LZ4/gzip mix)  
+- Kernel and DTB must match the **same base version** or the bootloader rejects it
+
+Detailed experimentation logs are inside:  
+`build-logs/`
+
+---
+
+## 🤝 Contributions
 
 Anyone experienced with:
 
-SDM845 kernel internals
+- **SDM845 kernel internals**  
+- **OnePlus 6/6T device tree**  
+- **USB host mode / DWC3 driver**  
+- **NetHunter boot images**  
+- **Qualcomm PHY configuration**
 
-OnePlus 6/6T device tree
+…is welcome to contribute.
 
-DWC3 USB host drivers
+PRs, forks, patches, DTB suggestions, or diagnostic logs are appreciated.
 
-NetHunter boot images
+---
 
-Qualcomm PHY / pinctrl / power domains
+## 📌 Todo / Roadmap
 
-…is welcome to contribute!
+- [ ] Stabilize repacker for NetHunter boot images  
+- [ ] Investigate `qcom,dwc3` → `snps,dwc3` transitions  
+- [ ] Patch OTG PHY clocks & regulators  
+- [ ] Add buildable kernel tree based on upstream SDM845  
+- [ ] Add release section with `.img` builds  
+- [ ] Document all dmesg error patterns  
+- [ ] Provide a simplified auto-patch script
 
-Please create:
+---
 
-Pull requests
+## 📜 License
 
-Issues
+MIT License – free to use, modify, contribute  
+This project is for educational & research purposes only.
 
-Notes
+---
 
-Logs
+## 🙏 Acknowledgements
 
-Every bit of information helps.
+- NetHunter Pro Team  
+- osm0sis – AIK  
+- topjohnwu – magiskboot  
+- SDM845 open-source kernel communities  
+- Contributors who test experimental OTG builds
 
-📜 License
+---
 
-MIT License
-This project is open for research and educational use.
-Contributions remain credited to their authors.
+
+
